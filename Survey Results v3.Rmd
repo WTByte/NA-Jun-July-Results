@@ -1,0 +1,537 @@
+---
+title: "NA FGO Reddit Survey Jun-Jul 2018"
+author: "WTByte"
+date: "29 July 2018"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+# Setting up the libraries and data
+setwd("~/Projects/Stats/Datasets/FGO Survey/NA Jun-Jul 2018")
+
+library(plyr)
+library(dplyr)
+library(tibble)
+library(ggplot2)
+library(forcats)
+library(tidyr)
+library(scales)
+library(kableExtra)
+library(car)
+library(userfriendlyscience)
+
+# Import the data
+data <- read.csv("Actual SSR NA complete.csv")
+
+# Some data cleaning/convention stuff
+colnames(data)[2] = "Spending"
+
+colnames(data)[12] = "Playtime"
+colnames(data)[25] = "Playtime.1"
+colnames(data)[38] = "Playtime.2"
+colnames(data)[51] = "Playtime.3"
+colnames(data)[64] = "Playtime.4"
+
+colnames(data)[13] = "SSR.Total"
+colnames(data)[26] = "SSR.Total.1"
+colnames(data)[39] = "SSR.Total.2"
+colnames(data)[52] = "SSR.Total.3"
+colnames(data)[65] = "SSR.Total.4"
+
+colnames(data)[14] = "Sex"
+colnames(data)[27] = "Sex.1"
+colnames(data)[40] = "Sex.2"
+colnames(data)[53] = "Sex.3"
+colnames(data)[66] = "Sex.4"
+
+colnames(data)[15] = "Reroll"
+colnames(data)[28] = "Reroll.1"
+colnames(data)[41] = "Reroll.2"
+colnames(data)[54] = "Reroll.3"
+colnames(data)[73] = "Reroll.4"
+
+colnames(data)[3] = "SSR.Saber"
+  
+data <- data.frame(lapply(data, function(x) {
+                  gsub("Minamoto no Raik", "Minamoto no Raiko", x)
+             }))
+
+data <- sapply(data, as.character) # since your values are `factor`
+data[is.na(data)] <- ""
+
+data <- data.frame(data)
+
+# Combine all the columns together
+
+column_names = c("SSR.Saber","SSR.Archer","SSR.Lancer","SSR.Rider","SSR.Caster","SSR.Assassin","SSR.Berserker",
+                 "SSR.Ruler","SSR.Avenger.or.Angra","Playtime","SSR.Total","Sex","Reroll")
+
+for (i in 1:length(column_names)) {
+  data <- data %>% unite(!!column_names[i],contains(column_names[i]),sep="")
+}
+
+data$SSR.Total <- as.numeric(data$SSR.Total)
+data$Spending <- as.character(data$Spending)
+#data$Spending[data$Spending == ""] <- NA
+
+# Change variable names for spending
+data$Spending[data$Spending=="More than 100USD but less than 500 Montlhy"] <- "100-500 USD monthly"
+data$Spending[data$Spending=="More than 1USD but less than 100 Monthly"] <- "1-100 USD monthly"
+data$Spending[data$Spending=="More than 500 Monthly"] <- "500+ USD monthly"
+
+# Set as factor and relevel for ease of viewing later
+data$Spending <- as.factor(data$Spending)
+data$Spending <- factor(data$Spending, levels = c("F2P","Paid Gacha Only","1-100 USD monthly","100-500 USD monthly",
+                                                  "500+ USD monthly"))
+
+data <- filter(data,data$SSR.Total <= 200)
+# remove 420 plz
+data$Sex[498] <- "Male"
+data$Sex[data$Sex==""] <- "Prefer not to say"
+
+# Change variable names for playtime
+data$Playtime[data$Playtime=="Less than 1 month"] <- "Less than 1 month"
+data$Playtime[data$Playtime=="Between 1 and 3 months"] <- "1-3 months"
+data$Playtime[data$Playtime=="Between 3 and 6 months"] <- "3-6 months"
+data$Playtime[data$Playtime=="Between 6 and 12 months"] <- "6-12 months"
+data$Playtime[data$Playtime=="More than 1 year"] <- "12+ months"
+
+data$Playtime <- as.factor(data$Playtime)
+data$Playtime <- factor(data$Playtime, levels = c("Less than 1 month", "1-3 months", "3-6 months","6-12 months",
+                                                  "12+ months"))
+
+# Servant List for survey
+Saber <- c("Artoria Pendragon","Altera","Okita Souji","Mordred","Nero Claudius \\[Bride\\]","Ryougi Shiki")
+Archer <- c("Gilgamesh","Orion","Nikola Tesla","Arjuna")
+Lancer <- c("Scathach","Karna","Brynhildr","Artoria Pendragon \\[Lancer\\]")
+Rider <- c("Francis Drake","Queen Medb","Iskandar","Ozymandias")
+Caster <- c("Zhuge Liang \\[El-Melloi II\\]","Tamamo-no-mae","Xuanzang","Leonardo Da Vinci")
+Assassin <- c("Jack the Ripper","MHX","Shuten Douji")
+Berserker <- c("Sakata Kintoki","Vlad III","Cu Chulainn \\[Alter\\]","Florence Nightingale","Minamoto no Raiko")
+Ruler <- c("Jeanne D'arc","Amakusa Shirou")
+Avenger <- c("Jeanne D'arc \\[Alter\\]","Edmond Dantes","Angra Mainyu")
+
+Class_Names <- c("Saber","Archer","Lancer","Rider","Caster","Assassin","Berserker","Ruler","Avenger")
+Class <- list(Saber,Archer,Lancer,Rider,Caster,Assassin,Berserker,Ruler,Avenger)
+
+data <- na.exclude(data)
+
+### Now the actual calculations and getting things put together
+
+# Spending Demographics
+spending_freq <-  data %>% group_by(Spending) %>% summarise(Frequency = n())
+spending_freq <- spending_freq %>% mutate("Percent of Total" = round((Frequency / colSums(spending_freq[1:nrow(spending_freq),2]))*100,2))
+
+# Spending vs Sex
+
+spending_sex <- table(data$Spending,data$Sex)
+
+spending_sex_prop1 <- prop.table(spending_sex,1)
+spending_sex_prop2 <- prop.table(spending_sex,2)
+
+# Playtime
+
+spending_playtime <- table(data$Spending,data$Playtime)
+spending_playtime_prop1 <- prop.table(spending_playtime,1)
+spending_playtime_prop2 <- prop.table(spending_playtime,2)
+
+# Spending Demographics and Reroll
+reroll_freq <- table(data$Spending,data$Reroll)
+reroll_freq_prop1 <- prop.table(reroll_freq,1)
+reroll_freq_prop2 <- prop.table(reroll_freq,2)
+
+# Total SSRs pdf plot
+
+a1 <- ggplot(data, aes(SSR.Total))
+SSR_pdf <- a1 + geom_density(kernel = "gaussian", aes(fill=Spending),alpha=0.8) + labs(title="PDF of SSRs vs Spending",x="Total SSRs")
+
+# mean values
+
+Mean_SSR = data.frame(round(tapply(data$SSR.Total,data$Spending,"mean"),2))
+Median_SSR = data.frame(tapply(data$SSR.Total,data$Spending,"median"))
+Total_SSR_df <- cbind(Mean_SSR,Median_SSR)
+colnames(Total_SSR_df) <- c("Mean","Median")
+
+# Box plots before ANOVA
+
+bp <- ggplot(data, aes(x=Spending, y=SSR.Total)) + 
+  geom_boxplot() + labs(title="Spending vs Total SSR",x="Spending",y="Total SSR")
+
+boxplot_SSR <- bp 
+
+# ANOVA analysis for total SSRs
+aov1 <- aov(data$SSR.Total ~ data$Spending)
+
+### Unique SSR frequencies
+
+data_sets = levels(data$Spending)
+Spend_Type = c("f2p","100.500","1.100","500","paid")
+
+nam = rep(0,length(Class_Names))
+nam2 = rep(0,length(data_sets))
+
+### This function iterates through each servant class for each type of spending
+for (j in 1:length(data_sets)) {
+  for (i in 1:length(Class_Names)) {
+    counts <- Class[[i]]
+    
+    # This retrieves the number of unique SSRs for a given spending demographic and servant class  
+    test2 <- sapply(filter(data,Spending==data_sets[j])[,2+i], function(x) {
+      sapply(counts, function(y) {
+        sum(grepl(y, x))
+      })
+    })
+    
+    # Assign result to a name
+    nam[i] <- paste(Class_Names[i],"Total",Spend_Type[j], sep = ".")
+    (assign(nam[i], as.data.frame(rowSums(test2), col.names = "Total")))
+    
+    if (i==max(length(Class_Names))) {
+      class_list <- lapply(nam, function(x) get(x))
+      nam2[j] <- paste("Unique_SSR",Spend_Type[j], sep = "_")
+      assign(nam2[j], do.call("rbind", class_list))
+      
+    }
+  }
+}
+
+# remove the backslashes
+rownames(Unique_SSR_f2p) = gsub("\\", "", rownames(Unique_SSR_f2p), fixed = TRUE)
+rownames(Unique_SSR_1.100) = gsub("\\", "", rownames(Unique_SSR_1.100), fixed = TRUE)
+rownames(Unique_SSR_100.500) = gsub("\\", "", rownames(Unique_SSR_100.500), fixed = TRUE)
+rownames(Unique_SSR_500) = gsub("\\", "", rownames(Unique_SSR_500), fixed = TRUE)
+rownames(Unique_SSR_paid) = gsub("\\", "", rownames(Unique_SSR_paid), fixed = TRUE)
+
+Servants = (as.data.frame(rep(0,35)))
+colnames(Servants) = "Servants"
+nam3 = rep("Servants",5)
+
+for (s in 1:35) {
+  Servants[s,1] = rownames(Unique_SSR_f2p)[s]
+}
+
+Servants$Class = c(rep("Saber",length(Saber)),rep("Archer",length(Archer)),rep("Lancer",length(Lancer)),
+                   rep("Rider",length(Rider)),rep("Caster",length(Caster)),rep("Assassin",length(Assassin)),
+                   rep("Berserker",length(Berserker)),rep("Ruler",length(Ruler)),rep("Avenger",length(Avenger))) 
+
+Unique_SSR_f2p <- cbind(Unique_SSR_f2p,Servants)
+Unique_SSR_1.100 <- cbind(Unique_SSR_1.100,Servants)
+Unique_SSR_100.500 <- cbind(Unique_SSR_100.500,Servants)
+Unique_SSR_500 <- cbind(Unique_SSR_500,Servants)
+Unique_SSR_paid <- cbind(Unique_SSR_paid,Servants)
+
+colnames(Unique_SSR_f2p)[1] = colnames(Unique_SSR_1.100)[1] = colnames(Unique_SSR_100.500)[1] <- "Total"
+colnames(Unique_SSR_500)[1] = colnames(Unique_SSR_paid)[1] <- "Total"
+
+###
+
+#Plots for each
+text_size = 2.5
+g1 <- ggplot(Unique_SSR_f2p, aes(x=fct_inorder(Servants), y=Total))
+plot_f2p <- g1 + geom_bar(stat = "identity", aes(fill=Class)) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + geom_text(aes(label=Total),size = text_size) + labs(title="Unique SSRs for f2p",x="Servant",y="Frequency")
+
+g2 <- ggplot(Unique_SSR_1.100, aes(x=fct_inorder(Servants), y=Total))
+plot_1.100 <- g2 + geom_bar(stat = "identity", aes(fill=Class)) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + geom_text(aes(label=Total),size = text_size) + labs(title="Unique SSRs for $1-100",x="Servant",y="Frequency")
+
+g3 <- ggplot(Unique_SSR_100.500, aes(x=fct_inorder(Servants), y=Total))
+plot_100.500 <- g3 + geom_bar(stat = "identity", aes(fill=Class)) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + geom_text(aes(label=Total),size = text_size) + labs(title="Unique SSRs for $100-500",x="Servant",y="Frequency")
+
+g4 <- ggplot(Unique_SSR_500, aes(x=fct_inorder(Servants), y=Total))
+plot_500 <- g4 + geom_bar(stat = "identity", aes(fill=Class)) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) +  geom_text(aes(label=Total), size = text_size) + labs(title="Unique SSRs for $500+",x="Servant",y="Frequency")
+
+g5 <- ggplot(Unique_SSR_paid, aes(x=fct_inorder(Servants), y=Total))
+plot_paid <- g5 + geom_bar(stat = "identity", aes(fill=Class)) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + geom_text(aes(label=Total),size = text_size) + labs(title="Unique SSRs for Paid Only",x="Servant",y="Frequency")
+
+### Playtime vs Number of SSRs
+test <- data %>% filter(data$Spending == "F2P")
+test1 <-  data.frame(round(tapply(test$SSR.Total,test$Playtime,"mean"),2))
+test1 <- test1[-1,]  
+
+# Classes vs Spending Type
+
+# Forgot to include the number of people who didn't roll any lol
+# Iterate through each spending type, then iterate through each fking heading
+
+Spend_Type2 <- c("f2p","paid","1.100","100.500","500")
+
+# for (i in 1:length(Spend_Type2)) {
+#   dummy_vector = rep(0,length(Class_Names))
+#   nam5 <- paste("none",Spend_Type[i],sep="_")
+#   #assign(nam5,rep(0,length(Class_Names)))
+# 
+#   for (j in 1:length(Class_Names)) {
+#     dummy_vector[j] = sum(data[,2+j][data$Spending == levels(data$Spending)[i]] == "")
+#   }
+#   assign(nam5,dummy_vector)
+#   
+# }
+
+nam5 = rep(0,length(Class_Names))
+
+for (i in 1:length(Class_Names)) {
+  
+  dummy_vector = rep(0,length(Spend_Type2)+1)
+  nam5[i] <- paste("none",Class_Names[i],sep="_")
+  
+  for (j in 1:length(Spend_Type2)) {
+    dummy_vector[j+1] = sum(data[,2+i][data$Spending == levels(data$Spending)[j]] == "")
+  }
+  dummy_vector[1] <- "None"
+  assign(nam5[i],dummy_vector)
+}
+
+for (i in 1:length(Class_Names)) {
+  nam4 <- paste("Spending",Class_Names[i], sep = "_")
+  
+  assign(nam4,cbind(
+  "Servants"  = Unique_SSR_f2p[Unique_SSR_f2p$Class == Class_Names[i],2],
+  "F2P"  = Unique_SSR_f2p[Unique_SSR_f2p$Class == Class_Names[i],1],
+  "Paid Gacha Only" = Unique_SSR_paid[Unique_SSR_paid$Class == Class_Names[i],1],
+  "1-100 USD monthly" = Unique_SSR_1.100[Unique_SSR_1.100$Class == Class_Names[i],1],
+  "100-500 USD monthly" = Unique_SSR_100.500[Unique_SSR_100.500$Class == Class_Names[i],1],
+  "500+ USD monthly" = Unique_SSR_500[Unique_SSR_500$Class == Class_Names[i],1])
+  )
+}
+
+for (i in 1:length(Class_Names)) {
+  nam4 <- paste("Spending",Class_Names[i], sep = "_")
+  
+  assign(nam4,rbind(get(nam4),get(nam5[i])))
+  
+  nam4 <- data.frame(nam4)
+  
+}
+
+Spending_Saber <- data.frame(Spending_Saber)
+colnames(Spending_Saber) <- c("Servants","F2P","Paid.Gacha.Only","1-100.USD.monthly","100-500.USD.monthly","500.USD.monthly")
+
+### Table to combine servants 
+
+rownames(Unique_SSR_1.100) <- NULL
+
+rownames(Unique_SSR_100.500) <- NULL
+
+rownames(Unique_SSR_500) <- NULL
+
+rownames(Unique_SSR_f2p) <- NULL
+
+rownames(Unique_SSR_paid) <- NULL
+
+Unique_SSR_Combined <- rbind(Unique_SSR_f2p,Unique_SSR_paid,Unique_SSR_1.100,Unique_SSR_100.500,Unique_SSR_500)
+
+Unique_SSR_Combined_Total <- Unique_SSR_Combined %>% group_by(Servants) %>% summarise(Total = sum(Total))
+
+Unique_SSR_Combined_Total_Descending <- Unique_SSR_Combined_Total[order(-Unique_SSR_Combined_Total$Total),]
+
+### SSRs by class
+
+saber_table <- kable(Spending_Saber, caption = "Table 12: Saber Class Across Spending Category") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+archer_table <- kable(Spending_Archer, caption = "Table 13: Archer Class Across Spending Category") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+lancer_table <- kable(Spending_Lancer,caption = "Table 14: Lancer Class Across Spending Category") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+rider_table <- kable(Spending_Rider, caption = "Table 15: Rider Class Across Spending Category") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+caster_table <- kable(Spending_Caster, caption = "Table 16: Caster Class Across Spending Category") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+assassin_table <- kable(Spending_Assassin, caption = "Table 17: Assassin Class Across Spending Category") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+berserker_table <- kable(Spending_Berserker, caption = "Table 18: Berserker Class Across Spending Category") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+ruler_table <- kable(Spending_Ruler, caption = "Table 19: Ruler Class Across Spending Category") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+avenger_table <- kable(Spending_Avenger, caption = "Table 20: Avenger Class Across Spending Category") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+
+
+### Most common SSRs
+
+popupvar <- rep("",nrow(Unique_SSR_Combined_Total_Descending))
+popupvar[3] <- "Praise Jeanne <3"
+
+Unique_SSR_Combined_Total_Descending$Servants <- cell_spec(
+  Unique_SSR_Combined_Total_Descending$Servants, # Cell texts
+  popover = spec_popover(
+    content = popupvar,
+    title = NULL,                           # title will add a Title Panel on top
+    position = "right"
+  ))
+
+common_ssr_table <- kable(Unique_SSR_Combined_Total_Descending, escape = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  scroll_box(width = "100%", height = "230px")
+```
+
+# Introduction
+
+This is a reddit community survey for Fate Grand/Order (FGO) players taken in the June - July 2018 period. The survey focused on the Super Super Rare (SSR) heroic spirits. A total of 4930 submissions were collected.
+
+Data processing/cleaning was conducted before analysis of the data. These included:
+
+1. Removal of blank and NA rows
+2. Removal of F2P user with 420 total SSRs with less than 1 month played
+3. Merging of the multiple columns for easier data analysis e.g. grouping Sabers together etc.
+4. Assuming that blank sex indicated "Prefer not to say"
+
+After data processing, a total sample size of n=4794 was available (approximately 4% reduction in data). Submissions with missing data were removed for faster analysis though it is not the most efficient use of the data. A possible improvement would be to use data imputation to fill in missing data instead of discarding the whole submission. 
+
+It is important to consider the bias in the data set. Since it was taken from 3 sources (one of which was reddit), it may not be representative of the whole player base of FGO.
+
+# Spending Demographics
+
+```{r,echo=FALSE}
+kable(spending_freq,caption="Table 1: Spending of Players") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+From Table 1, 72.03% of players have spent at least \$1 in the game so far. Of the players who have spent money on the game, 42.03% were from paid gacha only, 35.85% spent \$1 to $100, 19.98% spent between \$100 and \$500 per month, and 2.14% spent more than \$500.
+
+## Sex
+Table 2 to 4 summarises Spending and Sex.
+```{r,echo=FALSE}
+kable(spending_sex,caption="Table 2: Spending vs Sex") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+Table 2 contains the frequency for each of the categories of left blank, Female, Male and "Prefer not to say".
+
+```{r,echo=FALSE}
+kable(round(spending_sex_prop1,2),caption="Table 3: Spending vs Sex Conditioning on Spending") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+Table 3 displays the proportions of each Sex given they are a certain spender e.g. in F2P, females make up 11% of the total. This means that summing up each row will result in 100%.
+
+```{r,echo=FALSE}
+kable(round(spending_sex_prop2,2), caption="Table 4: Spending vs Sex Conditioning on Sex") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+Similarly, Table 4 conditions on the Sex variable e.g. given someone is Male, 27% of them are classified as F2P. In other words, summing up the columns will add up to 100%.
+
+## Playtime
+The variable playtime was divided into five categories:
+
+* Less than 1 month
+* 1-3 months
+* 3-6 months
+* 6-12 months
+* 12+ months (more than a year)
+
+Table 5 below displays the frequencies of playtime summarised by spending type.
+```{r,echo=FALSE}
+kable(spending_playtime, caption = "Table 5: Spending vs Playtime") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+Table 6 represents the frequencies as proportions, conditioning on the rows e.g. spending category. 
+```{r,echo=FALSE}
+kable(round(spending_playtime_prop1,2), caption="Table 6: Spending vs Playtime Conditioning on Spending") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+Table 7 shows the proportions of the frequencies conditioning on the columns e.g. by playtime.
+```{r,echo=FALSE}
+kable(round(spending_playtime_prop2,2), caption = "Table 7: Spending vs Playtime Conditioning on Playtime") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+It is interesting to see the proportion of F2P decrease over playtime.
+
+## Rerolls
+The rerolls is a question asking whether someone rerolled during account creation. The results are shown in Tables 8 to 10.
+```{r,echo=FALSE}
+kable(reroll_freq, caption = "Table 8: Spending vs Reroll") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+```{r,echo=FALSE}
+kable(round(reroll_freq_prop1,2), caption = "Table 9: Spending vs Reroll Conditioning on Spending") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+```{r,echo=FALSE}
+kable(round(reroll_freq_prop2,2),caption = "Table 10: Spending vs Reroll Conditioning on Reroll") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+## Total SSRs
+The mean and median of each spending categroy was found. These are shown in Table 11 below:
+```{r,echo=FALSE}
+kable(Total_SSR_df, caption = "Table 11: Means and Medians of Spending Categories") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+At a glance, the mean and medians are similar for F2P, Paid Gacha Only and spending of $1-100 monthly. This suggests the means of those groups are not as skewed by outliers.
+
+
+A probability density function (PDF) was also constructed based on the observations for each spending category. These plots visually support the means and medians calculated previously.
+```{r,fig.width=10,echo=FALSE}
+SSR_pdf
+```
+
+```{r,echo=FALSE}
+boxplot_SSR 
+```
+
+From the boxplot, there appear to be potential outliers represented as the black dots. These could be lucky players or in the case of players in the 500+ USD monthly spending category, big spenders.
+
+### Analysis of Variance
+An analysis of variance (ANOVA) can be conducted to investigate spending category and total number of SSRs.
+
+```{r,echo=FALSE}
+summary(aov1)
+```
+After running a one-way ANOVA using spending category as the explanatory variable, we get very strong evidence that the means of each spending category are different.
+
+The assumptions of the ANOVA are checked via the plots below.
+```{r,echo=FALSE}
+plot(aov1)
+```
+
+Diagnostics of the ANOVA assumptions indicate that:
+
+* the residuals of the data may not be normally distributed via the qq-plot
+* variance may not be constant by the Residuals vs Fitted plot as the group on the far right appears to have a higher variance than the other groups.
+
+A Kruskal-Wallis test can be used instead as it makes no assumptions about the distribution (nonparametric).
+```{r,echo=FALSE}
+kruskal.test(SSR.Total~Spending, data, na.action=na.omit)
+```
+The test also indicates there is strong evidence that the means of total SSRs of the spending categories are different. To identify which spending categories are statistically different, the Games-Howell post-hoc test was used.
+The Games-Howell test was used instead of Tukey because it does not assume equal variences and sample size.
+
+```{r,echo=FALSE}
+# https://rpubs.com/aaronsc32/games-howell-test
+posthocTGH(data$SSR.Total, data$Spending, method=c("games-howell"),
+           conf.level = 0.95, digits=2, p.adjust="none",
+           formatPvalue = TRUE)
+```
+From the outputs, all pairwise comparisons are statistically different with p-values < 0.01. Thus, all spending groups have different means in SSR total.
+
+## Unique SSRs
+Unique SSRs are measured by having at least one of a SSR servant. Consequently, any additional copies of those servants are not counted e.g. NP2 Artoria will only count once for that person. This was measured by extracting and counting the relevant servants.
+
+```{r,echo=FALSE}
+plot_f2p
+plot_paid
+plot_1.100
+plot_100.500
+plot_500
+```
+
+### Class Breakdown 
+Below is the class breakdown for each spending category. None represents no SSR for a given class.
+```{r,echo=FALSE}
+saber_table 
+archer_table
+lancer_table 
+rider_table 
+caster_table 
+assassin_table 
+berserker_table 
+ruler_table
+avenger_table
+```
+
+### Most Common Unique SSRs
+The most common SSRs are shown in descending order in Table 20. Note that this is counted in terms of unique SSR so copies above NP1 are not considered.
+```{r,echo=FALSE}
+common_ssr_table
+```
+
+From the table, we can see that the top five most common SSRs are:
+
+1. Zhung Liang [El-Melloi II]
+2. Jeanne D'arc [Alter]
+3. Jean D'arc
+4. Altera
+5. Artoria Pendragon
+
+Conversly, the top five least common SSRs are:
+
+1. Artoria Pendragon [Lancer]
+2. Amakusa Shirou
+3. Leonardo Da Vinci
+4. Edmond Dantes
+5. Queen Medb
